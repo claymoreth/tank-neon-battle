@@ -8,7 +8,7 @@ import {
 } from './maps.js';
 import { makeTank, onIce, moveTank, snapTurn, playerBulletStats, canFire } from './tank.js';
 import { buildQueue, spawnEnemy, spawnInterval, maxAlive, updateEnemyAI, ENEMY_TYPES } from './enemy.js';
-import { isBossLevel, spawnBoss, bossShoot } from './boss.js';
+import { isBossLevel, spawnBoss, bossShoot, updateBossAI, bossTurnNow, bossWatchdog } from './boss.js';
 import { makeBullet, fireBullet, stepBullets } from './bullet.js';
 import { dropPowerup, applyPowerup, setRingSteel } from './powerup.js';
 import { burst, muzzle, smokePuff, stepParticles, shake } from './particles.js';
@@ -632,9 +632,21 @@ function updateBoss(dt) {
   b.flashT = Math.max(0, b.flashT - dt);
   b.recoilT = Math.max(0, b.recoilT - dt);
   b.muzzleT = Math.max(0, b.muzzleT - dt);
-  updateEnemyAI(G, b, dt, false); // movement only; no shared shoot timer
+  b.blockCd = Math.max(0, (b.blockCd || 0) - dt);
+  updateBossAI(G, b, dt); // chase the nearest player (+ unstuck reverse)
   const others = [...G.playersArr, ...G.enemies, b];
+  const ox = b.x;
+  const oy = b.y;
   moveTank(G.grid, b, b.speed * dt, others);
+  const disp = Math.hypot(b.x - ox, b.y - oy);
+  const step = b.speed * dt;
+  if (disp < Math.max(0.25, step * 0.25) && b.unstuckT <= 0 && b.blockCd <= 0) {
+    // Physically blocked: turn NOW instead of pushing into the wall
+    // until the next AI timer fires. blockCd stops flip-flopping.
+    bossTurnNow(G, b);
+    b.blockCd = 0.3;
+  }
+  bossWatchdog(G, b, dt, disp);
   b.shootT -= dt;
   if (b.shootT <= 0) {
     b.shootT = b.shootInterval || 1.6;
@@ -897,8 +909,8 @@ function render() {
     if (SHOW_FIRE && G.state === 'playing') drawFireButton(ctx, G);
     if (G.state === 'playing') drawJoystick(ctx);
     if (G.boss && G.boss.alive && G.bossState !== 'none') drawBossBar(ctx, G);
-    if (G.bossState === 'warning') drawBanner(ctx, 'BOSS ROUND ' + G.level + ' MUNCUL!', '#ff2d5d');
-    if (G.bossState === 'defeated') drawBanner(ctx, 'BOSS KALAH! NEXT ROUND', '#ffd23f');
+    if (G.bossState === 'warning') drawBanner(ctx, 'BOSS ROUND ' + G.level + ' APPEARED!', '#ff2d5d');
+    if (G.bossState === 'defeated') drawBanner(ctx, 'BOSS DEFEATED! NEXT ROUND', '#ffd23f');
     if (G.state === 'paused') drawPaused(ctx, G);
     else if (G.state === 'levelclear') drawLevelClear(ctx, G);
     else if (G.state === 'gameover') drawGameOver(ctx, G);
@@ -937,6 +949,15 @@ window.__game = {
   get queueLeft() { return G.queue.length - G.queueIndex; },
   get bossHp() { return G.boss ? Math.max(0, G.boss.hp) : null; },
   get bossName() { return G.boss ? G.boss.name : null; },
+  get bossState() { return G.bossState; },
+  get boss() {
+    const b = G.boss;
+    return b ? {
+      x: Math.round(b.x), y: Math.round(b.y), dir: b.dir,
+      hp: b.hp, alive: b.alive, unstuck: b.unstuck || 0,
+    } : null;
+  },
+  get bossUnstuck() { return G.boss ? (G.boss.unstuck || 0) : 0; },
   get baseAlive() { return G.baseAlive; },
   get highScore() { return G.highScore; },
   get muted() { return G.muted; },
@@ -959,8 +980,8 @@ window.__game = {
   get fires() { return G.fires.length; },
   get smoke() { return G.smoke.length; },
   get banner() {
-    if (G.bossState === 'warning') return 'BOSS ROUND ' + G.level + ' MUNCUL!';
-    if (G.bossState === 'defeated') return 'BOSS KALAH! NEXT ROUND';
+    if (G.bossState === 'warning') return 'BOSS ROUND ' + G.level + ' APPEARED!';
+    if (G.bossState === 'defeated') return 'BOSS DEFEATED! NEXT ROUND';
     return null;
   },
   get fireButton() {
@@ -1032,6 +1053,22 @@ window.__game = {
     p.y = y;
     p.moveSpeed = 0;
     if (dir !== undefined) p.dir = dir;
+  },
+  // Test-only: teleport the boss (resets watchdog state so the move
+  // itself is not read as "stuck").
+  warpBoss(x, y, dir) {
+    const b = G.boss;
+    if (!b) return;
+    b.x = x;
+    b.y = y;
+    if (dir !== undefined) b.dir = dir;
+    b.stillT = 0;
+    b.lastX = x;
+    b.lastY = y;
+    b.unstuckT = 0;
+    b.blockCd = 0;
+    b.path = null;
+    b.pathT = 0;
   },
   warpP2(x, y, dir) {
     const p = G.playersArr[1];
