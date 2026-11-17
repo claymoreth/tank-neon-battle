@@ -11,9 +11,10 @@ import { isBossLevel, spawnBoss, bossShoot } from './boss.js';
 import { makeBullet, fireBullet, stepBullets } from './bullet.js';
 import { dropPowerup, applyPowerup, setRingSteel } from './powerup.js';
 import { burst, muzzle, stepParticles, shake } from './particles.js';
+import { ensureBackground, stepSmoke, drawBackgroundLayer } from './background.js';
 import { drawTiles, drawGrassOver, drawTank, drawBullets, drawPowerups, drawParticles, drawFloats } from './draw.js';
 import {
-  MUTE_RECT, hitMute, drawHUD, drawSideStrips, drawBossBar,
+  MUTE_RECT, hitMute, hitFire, FIRE_RECT, drawFireButton, drawHUD, drawSideStrips, drawBossBar,
   drawTitle, titleClick, drawPaused, drawLevelClear,
   drawGameOver, gameOverClick, drawBanner,
 } from './hud.js';
@@ -71,6 +72,10 @@ const G = {
   time: 0,
   muted: false,
   baseAlive: true,
+  bgCanvas: null,
+  bgKey: '',
+  smoke: [],
+  fires: [],
   demoTanks: [],
   demoGrid: [],
   pendingBossKill: false,
@@ -267,6 +272,15 @@ function respawnPlayer(p) {
 const keys = new Set();
 let lastDir1 = null;
 let lastDir2 = null;
+// Mouse / touch fire for P1: hold to repeat, exactly like SPACE.
+let mouseFire = false;
+let touchFire = false;
+// The on-screen FIRE button shows on touch devices and small screens;
+// on a desktop with a mouse it stays hidden.
+const IS_TOUCH =
+  ('ontouchstart' in window) ||
+  (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+const SHOW_FIRE = IS_TOUCH || window.innerWidth < 1000;
 const P1_DIRS = { KeyW: 0, KeyD: 1, KeyS: 2, KeyA: 3 };
 const P2_DIRS = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3 };
 
@@ -351,6 +365,48 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
+// Left mouse click fires P1 (hold to repeat). The shot goes in the tank's
+// current facing direction, exactly like SPACE — the mouse never aims.
+// Button hit-testing lives in the click handler above, so a click on a
+// button never also fires: mousedown only acts during play and never on
+// the mute button.
+function canvasPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvas.width / rect.width),
+    y: (e.clientY - rect.top) * (canvas.height / rect.height),
+  };
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  const { x, y } = canvasPos(e);
+  if (hitMute(x, y)) return;
+  if (G.state !== 'playing') return;
+  ensureAudio();
+  mouseFire = true;
+  firePlayerBullet(G.playersArr[0]);
+});
+window.addEventListener('mouseup', () => { mouseFire = false; });
+window.addEventListener('blur', () => { mouseFire = false; touchFire = false; });
+
+// Touch: only the on-screen FIRE button shoots. Taps anywhere else fall
+// through to the click handler (title / pause / game over buttons).
+canvas.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  if (!t) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (t.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (t.clientY - rect.top) * (canvas.height / rect.height);
+  if (G.state !== 'playing' || !hitFire(x, y)) return;
+  e.preventDefault();
+  ensureAudio();
+  touchFire = true;
+  firePlayerBullet(G.playersArr[0]);
+}, { passive: false });
+canvas.addEventListener('touchend', () => { touchFire = false; });
+canvas.addEventListener('touchcancel', () => { touchFire = false; });
+
 // ---- Per-frame updates ----
 function countPlayerBullets(p) {
   let n = 0;
@@ -362,6 +418,20 @@ function countEnemyBullets(e) {
   let n = 0;
   for (const b of G.bullets) if (b.side === 'enemy' && b.owner === e) n++;
   return n;
+}
+
+// One P1 shot: shared by SPACE, mouse click and the touch FIRE button.
+function firePlayerBullet(p) {
+  if (!p || !p.alive) return false;
+  if (!canFire(p, countPlayerBullets(p))) return false;
+  const st = playerBulletStats(p);
+  const b = fireBullet(p, st.speed, st.steel);
+  G.bullets.push(b);
+  p.fireCd = 0.18;
+  muzzle(G, b.x, b.y);
+  shake(G, 2, 0.08);
+  sfxShoot(G.mode);
+  return true;
 }
 
 function updatePlayer(p, dt) {
@@ -394,16 +464,10 @@ function updatePlayer(p, dt) {
   }
   p.vx = DIRS[p.dir].x * (p.moveSpeed || 0);
   p.vy = DIRS[p.dir].y * (p.moveSpeed || 0);
-  const firing = p.player === 1 ? keys.has('Space') : keys.has('Enter');
-  if (firing && canFire(p, countPlayerBullets(p))) {
-    const st = playerBulletStats(p);
-    const b = fireBullet(p, st.speed, st.steel);
-    G.bullets.push(b);
-    p.fireCd = 0.18;
-    muzzle(G, b.x, b.y);
-    shake(G, 2, 0.08);
-    sfxShoot(G.mode);
-  }
+  const firing = p.player === 1
+    ? (keys.has('Space') || mouseFire || touchFire)
+    : keys.has('Enter');
+  if (firing) firePlayerBullet(p);
 }
 
 function updateEnemy(e, dt) {
@@ -555,6 +619,7 @@ function updateFloats(dt) {
 
 function update(dt) {
   G.time += dt;
+  stepSmoke(G, dt);
   if (G.shakeT > 0) {
     G.shakeT -= dt;
     if (G.shakeT <= 0) G.shakeMag = 0;
@@ -616,6 +681,10 @@ function render() {
   }
   ctx.fillStyle = G.mode === 'neon' ? '#05010f' : '#04060f';
   ctx.fillRect(-24, -24, 1328, 768);
+  // War battlefield: pre-rendered static ground + edge ruins, blitted
+  // once; only the smoke puffs and neon fires animate, behind the tiles.
+  ensureBackground(G);
+  drawBackgroundLayer(ctx, G);
   if (G.state === 'title') {
     ctx.save();
     ctx.globalAlpha = 0.5;
@@ -634,6 +703,7 @@ function render() {
     drawFloats(ctx, G);
     drawSideStrips(ctx, G);
     drawHUD(ctx, G);
+    if (SHOW_FIRE && G.state === 'playing') drawFireButton(ctx, G);
     if (G.boss && G.boss.alive && G.bossState !== 'none') drawBossBar(ctx, G);
     if (G.bossState === 'warning') drawBanner(ctx, 'WARNING: BOSS TANK', '#ff2d5d');
     if (G.bossState === 'defeated') drawBanner(ctx, 'BOSS DEFEATED!', '#ffd23f');
@@ -694,6 +764,12 @@ window.__game = {
     if (G.bossState === 'warning') return 'WARNING: BOSS TANK';
     if (G.bossState === 'defeated') return 'BOSS DEFEATED!';
     return null;
+  },
+  get fireButton() {
+    return {
+      visible: SHOW_FIRE,
+      x: FIRE_RECT.x, y: FIRE_RECT.y, w: FIRE_RECT.w, h: FIRE_RECT.h,
+    };
   },
   get p1() {
     const p = G.playersArr[0];

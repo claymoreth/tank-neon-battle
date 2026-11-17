@@ -37,6 +37,10 @@ export function rectsOverlap(a, b) {
 }
 
 // Angle (radians) of a cardinal direction, for drawing.
+// The barrel is drawn pointing along local -y, so the rotation must map
+// local -y onto DIRS[d]: up = 0, right = PI/2, down = PI, left = -PI/2.
+// (The old table was 90 degrees off: a tank facing left drew its barrel
+// pointing down.)
 export function dirAngle(d) {
-  return [ -Math.PI / 2, 0, Math.PI / 2, Math.PI ][d];
+  return [ 0, Math.PI / 2, Math.PI, -Math.PI / 2 ][d];
 }

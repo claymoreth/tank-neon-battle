@@ -10,6 +10,30 @@ export function hitMute(x, y) {
   return inRect(x, y, MUTE_RECT);
 }
 
+// On-screen FIRE button for touch devices: bottom-right of the canvas,
+// in the right side strip so it never covers the playfield.
+export const FIRE_RECT = { x: 1130, y: 590, w: 130, h: 110 };
+
+export function hitFire(x, y) {
+  return inRect(x, y, FIRE_RECT);
+}
+
+export function drawFireButton(ctx, G) {
+  const r = FIRE_RECT;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,93,93,0.25)';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = '#ff5d5d';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3);
+  ctx.fillStyle = '#ff5d5d';
+  ctx.font = 'bold 26px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('FIRE', r.x + r.w / 2, r.y + r.h / 2 + 1);
+  ctx.restore();
+}
+
 export function drawMuteButton(ctx, G) {
   const r = MUTE_RECT;
   ctx.save();
@@ -83,7 +107,7 @@ export function drawSideStrips(ctx, G) {
   ctx.fillStyle = '#7d8598';
   const lx = 24;
   ctx.fillText('P1: WASD MOVE', lx, 120);
-  ctx.fillText('SPACE: FIRE', lx, 142);
+  ctx.fillText('SPACE / CLICK: FIRE', lx, 142);
   if (G.players === 2) {
     ctx.fillText('P2: ARROWS MOVE', lx, 176);
     ctx.fillText('ENTER: FIRE', lx, 198);
@@ -204,7 +228,7 @@ export function drawTitle(ctx, G) {
   ctx.fillText('HI-SCORE  ' + padScore(G.highScore), 640, 525);
   ctx.fillStyle = '#7d8598';
   ctx.font = '15px monospace';
-  ctx.fillText('P1: WASD MOVE + SPACE FIRE    |    P2: ARROWS MOVE + ENTER FIRE', 640, 600);
+  ctx.fillText('P1: WASD MOVE + SPACE / CLICK FIRE    |    P2: ARROWS MOVE + ENTER FIRE', 640, 600);
   ctx.fillText('1/2 PLAYERS    C CLASSIC    N NEON    ENTER START    P PAUSE    M MUTE', 640, 628);
   ctx.fillText('FLASHING RED TANKS DROP POWER-UPS: STAR, HELMET, GRENADE, SHOVEL, LIFE', 640, 656);
   ctx.restore();
