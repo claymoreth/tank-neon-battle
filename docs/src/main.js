@@ -27,6 +27,11 @@ import {
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+// Keyboard focus: the canvas takes focus on load (and again in
+// startGame) so WASD/arrows work immediately with no click into the
+// game area. The key handlers live on window, so they work whatever
+// element holds focus — this is belt and braces.
+canvas.focus();
 
 function loadHighScore() {
   try {
@@ -165,6 +170,7 @@ function startGame(mode, players) {
   if (players === 2) G.playersArr.push(makePlayerTank(2));
   loadLevel(1);
   G.state = 'playing';
+  canvas.focus();
 }
 
 function restart() {
@@ -302,7 +308,13 @@ function toggleMute() {
 }
 
 function currentDir(player) {
-  const map = player === 1 ? P1_DIRS : P2_DIRS;
+  // The touch joystick steers P1 while a drag is active.
+  if (player === 1 && joyDir !== null) return joyDir;
+  // In 1P mode the arrow keys also drive P1; in 2P mode they stay
+  // P2-only (arrows are P2's controls there).
+  const map = player === 1
+    ? (G.players === 1 ? { ...P1_DIRS, ...P2_DIRS } : P1_DIRS)
+    : P2_DIRS;
   const last = player === 1 ? lastDir1 : lastDir2;
   const order = [];
   if (last && keys.has(last)) order.push(last);
@@ -329,6 +341,17 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'KeyC') G.mode = 'classic';
     else if (e.code === 'KeyO') G.mode = 'pro';
     else if (e.code === 'Enter') startGame(G.mode, G.players);
+    else if (P1_DIRS[e.code] !== undefined || P2_DIRS[e.code] !== undefined) {
+      // A movement key starts the game at once and keeps steering: the
+      // key is already in `keys`, and lastDir is set here because the
+      // early return below skips the tracking at the end of the handler.
+      if (P1_DIRS[e.code] !== undefined) lastDir1 = e.code;
+      if (P2_DIRS[e.code] !== undefined) {
+        lastDir2 = e.code;
+        if (G.players === 1) lastDir1 = e.code;
+      }
+      startGame(G.mode, G.players);
+    }
     return;
   }
   if (e.code === 'KeyP' || e.code === 'Escape') {
@@ -346,7 +369,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (P1_DIRS[e.code] !== undefined) lastDir1 = e.code;
-  if (P2_DIRS[e.code] !== undefined) lastDir2 = e.code;
+  if (P2_DIRS[e.code] !== undefined) {
+    lastDir2 = e.code;
+    // In 1P mode the arrows steer P1 too (last-pressed-wins, like WASD).
+    if (G.players === 1) lastDir1 = e.code;
+  }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 
@@ -400,24 +427,83 @@ canvas.addEventListener('mousedown', (e) => {
   firePlayerBullet(G.playersArr[0]);
 });
 window.addEventListener('mouseup', () => { mouseFire = false; });
-window.addEventListener('blur', () => { mouseFire = false; touchFire = false; });
+window.addEventListener('blur', () => {
+  mouseFire = false; touchFire = false;
+  joyId = null; joyBase = null; joyKnob = null; joyDir = null; fireId = null;
+});
 
-// Touch: only the on-screen FIRE button shoots. Taps anywhere else fall
-// through to the click handler (title / pause / game over buttons).
+// Touch: the on-screen FIRE button shoots (tap or hold), and the LEFT
+// half of the screen is a virtual joystick that steers P1. Both are
+// tracked independently by touch identifier, so a player can steer with
+// one thumb and shoot with the other. Taps anywhere else fall through
+// to the click handler (title / pause / game over buttons).
+const JOY_R = 60;    // joystick base radius (canvas px)
+const JOY_KNOB = 26; // knob radius
+const JOY_DEAD = 12; // dead zone: smaller drags do not steer
+let joyId = null;    // identifier of the steering touch, or null
+let joyBase = null;  // {x, y} canvas coords where the finger landed
+let joyKnob = null;  // {x, y} canvas coords of the knob
+let joyDir = null;   // 0..3 while steering, else null
+let fireId = null;   // identifier of the FIRE touch, or null
+
+function joyUpdate(p) {
+  let dx = p.x - joyBase.x;
+  let dy = p.y - joyBase.y;
+  const len = Math.hypot(dx, dy);
+  if (len > JOY_R) { dx = dx / len * JOY_R; dy = dy / len * JOY_R; }
+  joyKnob = { x: joyBase.x + dx, y: joyBase.y + dy };
+  if (Math.hypot(dx, dy) < JOY_DEAD) { joyDir = null; return; }
+  joyDir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+}
+
 canvas.addEventListener('touchstart', (e) => {
-  const t = e.touches[0];
-  if (!t) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = (t.clientX - rect.left) * (canvas.width / rect.width);
-  const y = (t.clientY - rect.top) * (canvas.height / rect.height);
-  if (G.state !== 'playing' || !hitFire(x, y)) return;
-  e.preventDefault();
-  ensureAudio();
-  touchFire = true;
-  firePlayerBullet(G.playersArr[0]);
+  // On non-playing screens, touches fall through to the click handler
+  // so title/pause/game-over buttons keep working.
+  if (G.state !== 'playing') return;
+  for (const t of e.changedTouches) {
+    const { x, y } = canvasPos(t);
+    if (hitFire(x, y) && fireId === null) {
+      fireId = t.identifier;
+      e.preventDefault();
+      ensureAudio();
+      touchFire = true;
+      firePlayerBullet(G.playersArr[0]);
+    } else if (x < canvas.width / 2 && joyId === null) {
+      // Left half: virtual joystick. The base appears where the finger
+      // lands and the knob follows it.
+      joyId = t.identifier;
+      joyBase = { x, y };
+      joyKnob = { x, y };
+      joyDir = null;
+      e.preventDefault();
+      ensureAudio();
+    }
+    // Right half outside FIRE: ignored here — the click handler still
+    // sees it (e.g. the mute button).
+  }
 }, { passive: false });
-canvas.addEventListener('touchend', () => { touchFire = false; });
-canvas.addEventListener('touchcancel', () => { touchFire = false; });
+canvas.addEventListener('touchmove', (e) => {
+  if (G.state !== 'playing') return;
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId && joyBase) {
+      e.preventDefault();
+      joyUpdate(canvasPos(t));
+    }
+  }
+}, { passive: false });
+function touchEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) {
+      joyId = null; joyBase = null; joyKnob = null; joyDir = null;
+    }
+    if (t.identifier === fireId) {
+      fireId = null;
+      touchFire = false;
+    }
+  }
+}
+canvas.addEventListener('touchend', touchEnd);
+canvas.addEventListener('touchcancel', touchEnd);
 
 // ---- Per-frame updates ----
 function countPlayerBullets(p) {
@@ -712,6 +798,26 @@ function updateDemo(dt) {
 }
 
 // ---- Render ----
+// Virtual joystick overlay: a subtle base + knob in screen space, only
+// while a steering touch is active. It lives where the thumb already
+// is, so it never covers the playfield center.
+function drawJoystick(ctx) {
+  if (joyBase === null || joyKnob === null) return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(joyBase.x, joyBase.y, JOY_R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.arc(joyKnob.x, joyKnob.y, JOY_KNOB, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function render() {
   ctx.save();
   if (G.shakeT > 0 && G.shakeMag > 0) {
@@ -757,6 +863,7 @@ function render() {
     drawSideStrips(ctx, G);
     drawHUD(ctx, G);
     if (SHOW_FIRE && G.state === 'playing') drawFireButton(ctx, G);
+    if (G.state === 'playing') drawJoystick(ctx);
     if (G.boss && G.boss.alive && G.bossState !== 'none') drawBossBar(ctx, G);
     if (G.bossState === 'warning') drawBanner(ctx, 'WARNING: BOSS TANK', '#ff2d5d');
     if (G.bossState === 'defeated') drawBanner(ctx, 'BOSS DEFEATED!', '#ffd23f');
@@ -829,6 +936,9 @@ window.__game = {
       visible: SHOW_FIRE,
       x: FIRE_RECT.x, y: FIRE_RECT.y, w: FIRE_RECT.w, h: FIRE_RECT.h,
     };
+  },
+  get joy() {
+    return joyId === null ? null : { dir: joyDir, x: Math.round(joyBase.x), y: Math.round(joyBase.y) };
   },
   get p1() {
     const p = G.playersArr[0];
