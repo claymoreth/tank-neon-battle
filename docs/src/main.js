@@ -52,6 +52,7 @@ const G = {
   boss: null,
   bossState: 'none', // none | warning | active | defeated
   bossTimer: 0,
+  roundStart: null, // {level, score1, score2, lives1, lives2} at loadLevel — retry restores it
   bullets: [],
   powerups: [],
   particles: [],
@@ -134,6 +135,13 @@ function placePlayer(n) {
 }
 
 function loadLevel(n) {
+  // Snapshot the state entering this round: a game over retries THIS
+  // round (score/lives restored), it never sends the player back to
+  // round 1 (changed 2026-11-17).
+  G.roundStart = {
+    level: n, score1: G.score1, score2: G.score2,
+    lives1: G.lives1, lives2: G.lives2,
+  };
   G.grid = parseLayout(layoutFor(n));
   G.speedScale = 1 + Math.max(0, n - 15) * 0.05;
   G.enemies = [];
@@ -174,7 +182,17 @@ function startGame(mode, players) {
 }
 
 function restart() {
-  startGame(G.mode, G.players);
+  // Retry THE SAME ROUND (2026-11-17): restore the score and lives from
+  // when the round started, then reload that round. Never back to round 1.
+  const s = G.roundStart || { level: 1, score1: 0, score2: 0, lives1: 3, lives2: 3 };
+  G.score1 = s.score1;
+  G.score2 = s.score2;
+  G.lives1 = s.lives1;
+  G.lives2 = s.lives2;
+  G.newHigh = false;
+  loadLevel(s.level);
+  G.state = 'playing';
+  canvas.focus();
 }
 
 function toTitle() {
@@ -252,13 +270,28 @@ function bossDefeated(owner) {
   const b = G.boss;
   if (!b || !b.alive) return;
   b.alive = false;
+  // The fight is over: clear every bullet in flight, so a stray shot
+  // cannot destroy the base (or the player) during the victory banner.
+  G.bullets = [];
   burst(G, b.x, b.y, true);
   shake(G, 8, 0.3);
   sfxBigExplode();
-  if (owner && owner.side === 'player' && owner.player === 2) G.score2 += 5000;
+  const isP2 = owner && owner.side === 'player' && owner.player === 2;
+  if (isP2) G.score2 += 5000;
   else G.score1 += 5000;
+  // +1 LIFE for the player who landed the killing blow (max 5 lives;
+  // +1000 points instead when already at max).
+  if (owner && owner.side === 'player') {
+    if (owner.player === 2) {
+      if (G.lives2 < 5) { G.lives2++; addFloat(b.x, b.y - 26, '+1 LIFE', '#7dff6a'); }
+      else G.score2 += 1000;
+    } else {
+      if (G.lives1 < 5) { G.lives1++; addFloat(b.x, b.y - 26, '+1 LIFE', '#7dff6a'); }
+      else G.score1 += 1000;
+    }
+  }
   G.bossState = 'defeated';
-  G.bossTimer = 2.0;
+  G.bossTimer = 3.0;
 }
 
 function killPlayer(p) {
@@ -604,7 +637,7 @@ function updateBoss(dt) {
   moveTank(G.grid, b, b.speed * dt, others);
   b.shootT -= dt;
   if (b.shootT <= 0) {
-    b.shootT = 1.6;
+    b.shootT = b.shootInterval || 1.6;
     bossShoot(G, b);
     sfxEnemyShoot(G.mode);
   }
@@ -700,15 +733,14 @@ function updatePlaying(dt) {
   } else if (G.bossState === 'none') {
     const queueDone = G.queueIndex >= G.queue.length;
     const enemiesGone = G.enemies.length === 0;
-    if (queueDone && enemiesGone) {
-      if (isBossLevel(G.level)) {
-        G.bossState = 'warning';
-        G.bossTimer = 1.5;
-        spawnBoss(G);
-        sfxBossWarn();
-      } else {
-        levelClear();
-      }
+    if (queueDone && enemiesGone && isBossLevel(G.level)) {
+      // Every round ends with a boss (2026-11-17): clearing the queue
+      // alone never advances the level.
+      G.bossState = 'warning';
+      G.bossTimer = 1.5;
+      spawnBoss(G);
+      shake(G, 4, 0.25);
+      sfxBossWarn();
     }
   }
   stepParticles(G, dt);
@@ -865,8 +897,8 @@ function render() {
     if (SHOW_FIRE && G.state === 'playing') drawFireButton(ctx, G);
     if (G.state === 'playing') drawJoystick(ctx);
     if (G.boss && G.boss.alive && G.bossState !== 'none') drawBossBar(ctx, G);
-    if (G.bossState === 'warning') drawBanner(ctx, 'WARNING: BOSS TANK', '#ff2d5d');
-    if (G.bossState === 'defeated') drawBanner(ctx, 'BOSS DEFEATED!', '#ffd23f');
+    if (G.bossState === 'warning') drawBanner(ctx, 'BOSS ROUND ' + G.level + ' MUNCUL!', '#ff2d5d');
+    if (G.bossState === 'defeated') drawBanner(ctx, 'BOSS KALAH! NEXT ROUND', '#ffd23f');
     if (G.state === 'paused') drawPaused(ctx, G);
     else if (G.state === 'levelclear') drawLevelClear(ctx, G);
     else if (G.state === 'gameover') drawGameOver(ctx, G);
@@ -927,8 +959,8 @@ window.__game = {
   get fires() { return G.fires.length; },
   get smoke() { return G.smoke.length; },
   get banner() {
-    if (G.bossState === 'warning') return 'WARNING: BOSS TANK';
-    if (G.bossState === 'defeated') return 'BOSS DEFEATED!';
+    if (G.bossState === 'warning') return 'BOSS ROUND ' + G.level + ' MUNCUL!';
+    if (G.bossState === 'defeated') return 'BOSS KALAH! NEXT ROUND';
     return null;
   },
   get fireButton() {

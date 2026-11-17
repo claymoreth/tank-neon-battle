@@ -63,8 +63,10 @@ function renderEdge(G) {
   const ctx = c.getContext('2d');
   const pro = G.mode === 'pro';
   const rand = seededRand(G.level * 104729 + (pro ? 29 : 11));
-  // Ground: classic daylight; PRO night.
-  ctx.fillStyle = pro ? '#0b0604' : '#3a2f22';
+  // Ground: classic daylight; PRO night — brightened 2026-11-17 so the
+  // playfield reads at a glance (old #0b0604 measured ~8 luminance;
+  // the floor must stay clearly lighter than the dark tank hulls).
+  ctx.fillStyle = pro ? '#4a3826' : '#3a2f22';
   ctx.fillRect(0, 0, 1280, 720);
   // Ground mottling.
   for (let i = 0; i < 500; i++) {
@@ -72,7 +74,7 @@ function renderEdge(G) {
     const y = rand() * 720;
     const r = 4 + rand() * 18;
     ctx.fillStyle = pro
-      ? `rgba(${20 + rand() * 30},${10 + rand() * 14},${6 + rand() * 10},0.5)`
+      ? `rgba(${75 + rand() * 40},${55 + rand() * 30},${32 + rand() * 20},0.5)`
       : `rgba(${50 + rand() * 40},${40 + rand() * 30},${25 + rand() * 20},0.5)`;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -103,7 +105,7 @@ function renderEdge(G) {
 
 function drawRuins(ctx, rand, pro) {
   // Dark building silhouettes behind the arena's top and bottom strips.
-  ctx.fillStyle = pro ? '#160b08' : '#2b2118';
+  ctx.fillStyle = pro ? '#3a2a1e' : '#2b2118';
   for (let i = 0; i < 8; i++) {
     const w = 60 + rand() * 90;
     const h = 24 + rand() * 36;
@@ -122,7 +124,7 @@ function drawRuins(ctx, rand, pro) {
 }
 
 function drawSandbags(ctx, rand, pro, x0, y0, w, h) {
-  const cols = pro ? ['#3a2a1a', '#4a3622'] : ['#8a7a5a', '#a89878'];
+  const cols = pro ? ['#6b543a', '#7d6547'] : ['#8a7a5a', '#a89878'];
   for (let x = x0; x < x0 + w; x += 18) {
     for (let y = y0; y < y0 + h; y += 12) {
       ctx.fillStyle = cols[Math.floor(rand() * cols.length)];
@@ -134,7 +136,7 @@ function drawSandbags(ctx, rand, pro, x0, y0, w, h) {
 }
 
 function drawBarbedWire(ctx, rand, pro, x0, y0, x1, y1) {
-  ctx.strokeStyle = pro ? '#4a3a2a' : '#5a4a3a';
+  ctx.strokeStyle = pro ? '#6a5a44' : '#5a4a3a';
   ctx.lineWidth = 1;
   for (let i = 0; i < 2; i++) {
     ctx.beginPath();
@@ -188,7 +190,7 @@ function drawBurningCity(ctx, rand) {
     const h = 90 + rand() * 130;
     const x = 30 + rand() * 1180;
     const y = rand() < 0.5 ? 0 : 720 - h;
-    ctx.fillStyle = '#0d0503';
+    ctx.fillStyle = '#2e2018';
     ctx.fillRect(x, y, w, h);
     // Broken top.
     ctx.beginPath();
@@ -238,8 +240,10 @@ function renderWorld(G) {
   const pro = G.mode === 'pro';
   const rand = seededRand(G.level * 31 + (pro ? 5 : 3));
   // Ground: cracked, muddy earth. Classic: brown/army-green; PRO: dark
-  // scorched night ground.
-  ctx.fillStyle = pro ? '#17100a' : '#4a3a28';
+  // scorched night ground — brightened 2026-11-17 (old #17100a measured
+  // ~19 luminance; the floor must read ~105 so tanks, bullets and walls
+  // separate from it at a glance, while staying a warm dusk brown).
+  ctx.fillStyle = pro ? '#7d6c55' : '#4a3a28';
   ctx.fillRect(0, 0, c.width, c.height);
   // Mottled patches.
   for (let i = 0; i < 260; i++) {
@@ -247,7 +251,7 @@ function renderWorld(G) {
     const y = rand() * c.height;
     const r = 6 + rand() * 26;
     ctx.fillStyle = pro
-      ? `rgba(${30 + rand() * 30},${18 + rand() * 16},${10 + rand() * 10},0.45)`
+      ? `rgba(${125 + rand() * 40},${95 + rand() * 35},${60 + rand() * 30},0.45)`
       : `rgba(${70 + rand() * 50},${55 + rand() * 35},${30 + rand() * 20},0.45)`;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -317,14 +321,14 @@ function drawWorldDecor(ctx, G, rand, pro) {
     const y = row * TILE;
     if (rand() < 0.5) {
       // Trench: a dark dug line with wooden edges.
-      ctx.fillStyle = pro ? '#0e0805' : '#241a10';
+      ctx.fillStyle = pro ? '#4a3826' : '#241a10';
       ctx.fillRect(x + 6, y + TILE / 2 - 7, TILE - 12, 14);
-      ctx.fillStyle = pro ? '#2a1a10' : '#5a4630';
+      ctx.fillStyle = pro ? '#6a5138' : '#5a4630';
       ctx.fillRect(x + 6, y + TILE / 2 - 9, TILE - 12, 3);
       ctx.fillRect(x + 6, y + TILE / 2 + 6, TILE - 12, 3);
     } else {
       // Bunker: a low concrete block with a firing slit.
-      ctx.fillStyle = pro ? '#1c1410' : '#4a4438';
+      ctx.fillStyle = pro ? '#5a4632' : '#4a4438';
       ctx.fillRect(x + 8, y + 12, TILE - 16, TILE - 24);
       ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(x + 14, y + TILE / 2 - 3, TILE - 28, 6);
