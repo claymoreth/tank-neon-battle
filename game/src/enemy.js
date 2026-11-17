@@ -6,11 +6,13 @@ import { makeTank, solidForTank } from './tank.js';
 
 // Realistic colors: classic = army/desert tones; PRO = black metallic
 // with red/orange fire accents (darker, spikier, menacing).
+// CLASSIC enemies are DARK and DULL — clearly darker than the bright
+// army-green players (#6fae3f). No enemy has a star or a white outline.
 export const ENEMY_TYPES = {
-  basic: { hp: 1, speed: 60, bullet: 220, score: 100, color: '#4a5a44', color2: '#6b7d5e', proColor: '#23232c', proColor2: '#ff3b30' },
-  fast: { hp: 1, speed: 110, bullet: 240, score: 200, color: '#b89a5e', color2: '#d8c08a', proColor: '#2a2a24', proColor2: '#ff8c1a' },
-  power: { hp: 3, speed: 50, bullet: 240, score: 300, color: '#6e2f1e', color2: '#a85438', proColor: '#2c1c1c', proColor2: '#ff2d3c' },
-  big: { hp: 2, speed: 40, bullet: 220, score: 500, color: '#4a4d52', color2: '#7d838c', proColor: '#1a1a1e', proColor2: '#ff3b30' },
+  basic: { hp: 1, speed: 60, bullet: 220, score: 100, color: '#3a4438', color2: '#4c5744', proColor: '#23232c', proColor2: '#ff3b30' },
+  fast: { hp: 1, speed: 110, bullet: 240, score: 200, color: '#8a7a52', color2: '#6e6040', proColor: '#2a2a24', proColor2: '#ff8c1a' },
+  power: { hp: 3, speed: 50, bullet: 240, score: 300, color: '#5e2a1c', color2: '#4a2318', proColor: '#2c1c1c', proColor2: '#ff2d3c' },
+  big: { hp: 2, speed: 40, bullet: 220, score: 500, color: '#3c3f45', color2: '#2f3237', proColor: '#1a1a1e', proColor2: '#ff3b30' },
 };
 
 export function spawnInterval(level) {

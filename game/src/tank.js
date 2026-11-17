@@ -143,11 +143,14 @@ export function snapTurn(t, newDir) {
 }
 
 // Bullet stats for a player tank at its star level.
+// Base max is 2 (was 1): with max 1, one missed shot locked the player
+// out for the bullet's whole flight (up to ~2.8 s across the map) —
+// the 0.18 s cooldown never got a chance to matter. Cooldown stays 0.18 s.
 export function playerBulletStats(t) {
-  if (t.star >= 3) return { speed: 480, max: 2, steel: true };
-  if (t.star >= 2) return { speed: 420, max: 2, steel: false };
-  if (t.star >= 1) return { speed: 420, max: 1, steel: false };
-  return { speed: 320, max: 1, steel: false };
+  if (t.star >= 3) return { speed: 480, max: 3, steel: true };
+  if (t.star >= 2) return { speed: 420, max: 3, steel: false };
+  if (t.star >= 1) return { speed: 420, max: 2, steel: false };
+  return { speed: 320, max: 2, steel: false };
 }
 
 // Can this tank fire right now (active-bullet limit + cooldown)?

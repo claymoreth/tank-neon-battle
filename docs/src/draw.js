@@ -216,6 +216,22 @@ export function drawTank(ctx, G, t) {
   const barrelCol = '#26262b';
   const barrelDark = '#17171c';
 
+  // PRO players: a thin BLUE GLOW under the tank (ground, unrotated).
+  // BLUE = player, always. Enemies never get it.
+  if (pro && t.side === 'player') {
+    ctx.save();
+    ctx.shadowColor = '#22d3ee';
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = 'rgba(34,211,238,0.25)';
+    ctx.beginPath();
+    // Wide but flat: the glow must stick out past the tracks sideways
+    // (rx 0.72w) without reaching the barrel-probe radius below the tank
+    // (bottom edge y+0.14h+0.34h stays inside 24px).
+    ctx.ellipse(t.x, t.y + h * 0.14, w * 0.72, h * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   // Shadow: soft dark ellipse under the tank (unrotated, drawn first).
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -284,6 +300,14 @@ export function drawTank(ctx, G, t) {
   ctx.strokeStyle = dark2;
   ctx.lineWidth = 1.5;
   ctx.stroke();
+  // Player-only: a thin WHITE OUTLINE around the whole tank, so the
+  // player's tank is identifiable at a glance. No enemy ever has it.
+  if (t.side === 'player') {
+    hullPath(ctx, bw, bh);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
   // Bolts along the hull edges.
   ctx.fillStyle = dark2;
   for (const by of [-bh / 4, 0, bh / 4]) {
@@ -341,12 +365,41 @@ export function drawTank(ctx, G, t) {
   ctx.beginPath();
   ctx.arc(0, 0, w * 0.07, 0, Math.PI * 2);
   ctx.fill();
-  // PRO: red light on the turret.
-  if (pro) {
+  // Player-only markers (classic): a WHITE STAR on the turret + a small
+  // YELLOW light on the turret, so the player's tank reads instantly.
+  // No enemy ever has them.
+  if (!pro && t.side === 'player') {
     ctx.save();
-    ctx.shadowColor = '#ff2d3c';
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const r = i % 2 === 0 ? 7 : 3;
+      if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.fillStyle = '#ffd23f';
+    ctx.shadowColor = '#ffd23f';
+    ctx.shadowBlur = 5;
+    ctx.beginPath();
+    ctx.arc(tw * 0.30, -tw * 0.30, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  // PRO: a light on the turret — CYAN for players (BLUE = player),
+  // RED for enemies and the boss (RED = enemy). Never reversed.
+  if (pro) {
+    const lightCol = t.side === 'player' ? '#22d3ee' : '#ff2d3c';
+    ctx.save();
+    ctx.shadowColor = lightCol;
     ctx.shadowBlur = 6;
-    ctx.fillStyle = '#ff2d3c';
+    ctx.fillStyle = lightCol;
     ctx.beginPath();
     ctx.arc(w * 0.13, -h * 0.06, 2.5, 0, Math.PI * 2);
     ctx.fill();

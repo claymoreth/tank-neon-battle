@@ -88,12 +88,15 @@ const G = {
 
 function playerColor(n) {
   if (G.mode === 'pro') return n === 1 ? '#26292f' : '#2a2d33';
-  return n === 1 ? '#5c7a3a' : '#6b7a5e';
+  // CLASSIC players: BRIGHT army green — clearly brighter than any enemy.
+  return '#6fae3f';
 }
 
 function playerTrim(n) {
-  if (G.mode === 'pro') return n === 1 ? '#ff5a1a' : '#ff2d3c';
-  return n === 1 ? '#8a9a5b' : '#a8c8e0';
+  // PRO players: BRIGHT BLUE CYAN accents. BLUE = player, always.
+  if (G.mode === 'pro') return n === 1 ? '#22d3ee' : '#4df3ff';
+  // CLASSIC players: white trim (P1) / pale-blue trim (P2).
+  return n === 1 ? '#ffffff' : '#a8c8e0';
 }
 
 function makePlayerTank(n) {
@@ -678,7 +681,7 @@ function initDemo() {
   G.camX = 0;
   G.camY = 0;
   G.demoGrid = Array.from({ length: 19 }, () => Array(19).fill('.'));
-  const colors = ['#5c7a3a', '#b89a5e', '#4a4d52'];
+  const colors = ['#3a4438', '#8a7a52', '#3c3f45'];
   G.demoTanks = [];
   for (let i = 0; i < 3; i++) {
     const t = makeTank({
