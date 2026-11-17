@@ -1,17 +1,18 @@
-// TANK NEON BATTLE — game loop, states, input, spawning, level flow.
+// TANK PRO BATTLE — game loop, states, input, spawning, level flow.
 // One job: run the battle. Rendering lives in draw.js and hud.js.
 import { clamp, rand, DIRS } from './util.js';
 import {
   TILE, ORIGIN_X, ORIGIN_Y, parseLayout, layoutFor, tileAt, setTile,
   tileCenter, tileOf, BASE_ROW, BASE_COL, P1_SPAWN, P2_SPAWN,
+  VIEW_W, VIEW_H, CAM_MAX, COLS, ROWS,
 } from './maps.js';
 import { makeTank, onIce, moveTank, snapTurn, playerBulletStats, canFire } from './tank.js';
 import { buildQueue, spawnEnemy, spawnInterval, maxAlive, updateEnemyAI, ENEMY_TYPES } from './enemy.js';
 import { isBossLevel, spawnBoss, bossShoot } from './boss.js';
 import { makeBullet, fireBullet, stepBullets } from './bullet.js';
 import { dropPowerup, applyPowerup, setRingSteel } from './powerup.js';
-import { burst, muzzle, stepParticles, shake } from './particles.js';
-import { ensureBackground, stepSmoke, drawBackgroundLayer } from './background.js';
+import { burst, muzzle, smokePuff, stepParticles, shake } from './particles.js';
+import { ensureBackground, stepSmoke, drawEdgeLayer, drawWorldLayer, drawSmokeAndFires } from './background.js';
 import { drawTiles, drawGrassOver, drawTank, drawBullets, drawPowerups, drawParticles, drawFloats } from './draw.js';
 import {
   MUTE_RECT, hitMute, hitFire, FIRE_RECT, drawFireButton, drawHUD, drawSideStrips, drawBossBar,
@@ -37,7 +38,7 @@ function loadHighScore() {
 
 const G = {
   state: 'title',
-  mode: 'neon',
+  mode: 'pro',
   players: 1,
   level: 1,
   grid: [],
@@ -78,13 +79,21 @@ const G = {
   fires: [],
   demoTanks: [],
   demoGrid: [],
+  // Camera: top-left world offset of the 624x624 playfield window.
+  camX: 0,
+  camY: CAM_MAX,
   pendingBossKill: false,
   overReason: '',
 };
 
 function playerColor(n) {
-  if (G.mode === 'neon') return n === 1 ? '#4df3ff' : '#ff5df2';
-  return n === 1 ? '#ffd23f' : '#7dff5e';
+  if (G.mode === 'pro') return n === 1 ? '#26292f' : '#2a2d33';
+  return n === 1 ? '#5c7a3a' : '#6b7a5e';
+}
+
+function playerTrim(n) {
+  if (G.mode === 'pro') return n === 1 ? '#ff5a1a' : '#ff2d3c';
+  return n === 1 ? '#8a9a5b' : '#a8c8e0';
 }
 
 function makePlayerTank(n) {
@@ -100,7 +109,7 @@ function makePlayerTank(n) {
     speed: 130,
     hp: 1,
     color: playerColor(n),
-    color2: '#22222a',
+    color2: playerTrim(n),
     protectT: 2,
   });
 }
@@ -315,7 +324,7 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Digit1') G.players = 1;
     else if (e.code === 'Digit2') G.players = 2;
     else if (e.code === 'KeyC') G.mode = 'classic';
-    else if (e.code === 'KeyN') G.mode = 'neon';
+    else if (e.code === 'KeyO') G.mode = 'pro';
     else if (e.code === 'Enter') startGame(G.mode, G.players);
     return;
   }
@@ -350,7 +359,7 @@ canvas.addEventListener('click', (e) => {
   if (G.state === 'title') {
     const act = titleClick(G, x, y);
     if (act === 'mode-classic') G.mode = 'classic';
-    else if (act === 'mode-neon') G.mode = 'neon';
+    else if (act === 'mode-pro') G.mode = 'pro';
     else if (act === 'players-1') G.players = 1;
     else if (act === 'players-2') G.players = 2;
     else if (act === 'start') startGame(G.mode, G.players);
@@ -429,6 +438,7 @@ function firePlayerBullet(p) {
   G.bullets.push(b);
   p.fireCd = 0.18;
   muzzle(G, b.x, b.y);
+  smokePuff(G, b.x, b.y, false);
   shake(G, 2, 0.08);
   sfxShoot(G.mode);
   return true;
@@ -448,6 +458,8 @@ function updatePlayer(p, dt) {
   p.helmetT = Math.max(0, p.helmetT - dt);
   p.flashT = Math.max(0, p.flashT - dt);
   p.fireCd = Math.max(0, p.fireCd - dt);
+  p.recoilT = Math.max(0, p.recoilT - dt);
+  p.muzzleT = Math.max(0, p.muzzleT - dt);
   const dir = currentDir(p.player);
   const ice = onIce(G.grid, p);
   const rate = ice ? 4 : 20;
@@ -475,6 +487,8 @@ function updateEnemy(e, dt) {
   e.protectT = Math.max(0, e.protectT - dt);
   e.flashT = Math.max(0, e.flashT - dt);
   e.fireCd = Math.max(0, e.fireCd - dt);
+  e.recoilT = Math.max(0, e.recoilT - dt);
+  e.muzzleT = Math.max(0, e.muzzleT - dt);
   const act = updateEnemyAI(G, e, dt);
   const others = [...G.playersArr, ...G.enemies, ...(G.boss && G.boss.alive ? [G.boss] : [])];
   const moved = moveTank(G.grid, e, e.speed * dt, others);
@@ -483,6 +497,7 @@ function updateEnemy(e, dt) {
     const b = fireBullet(e, e.bulletSpeed, false);
     G.bullets.push(b);
     e.fireCd = 0.3;
+    smokePuff(G, b.x, b.y, false);
     sfxEnemyShoot(G.mode);
   }
 }
@@ -493,6 +508,8 @@ function updateBoss(dt) {
   if (G.bossState === 'warning') return;
   b.protectT = Math.max(0, b.protectT - dt);
   b.flashT = Math.max(0, b.flashT - dt);
+  b.recoilT = Math.max(0, b.recoilT - dt);
+  b.muzzleT = Math.max(0, b.muzzleT - dt);
   updateEnemyAI(G, b, dt, false); // movement only; no shared shoot timer
   const others = [...G.playersArr, ...G.enemies, b];
   moveTank(G.grid, b, b.speed * dt, others);
@@ -552,7 +569,7 @@ function updatePlaying(dt) {
         const before = G.enemies.filter((e) => e.alive);
         const res = applyPowerup(G, p, pu.type);
         pu.alive = false;
-        addFloat(p.x, p.y - 30, res.label, '#4df3ff');
+        addFloat(p.x, p.y - 30, res.label, '#ffd23f');
         if (p.player === 1) G.score1 += res.score;
         else G.score2 += res.score;
         for (const e of before) {
@@ -617,6 +634,21 @@ function updateFloats(dt) {
   G.floats = G.floats.filter((f) => f.t > 0);
 }
 
+function updateCamera() {
+  const alive = G.playersArr.filter((p) => p.alive);
+  if (!alive.length) return;
+  let cx = 0;
+  let cy = 0;
+  for (const p of alive) {
+    cx += p.x;
+    cy += p.y;
+  }
+  cx /= alive.length;
+  cy /= alive.length;
+  G.camX = clamp(cx - ORIGIN_X - VIEW_W / 2, 0, CAM_MAX);
+  G.camY = clamp(cy - ORIGIN_Y - VIEW_H / 2, 0, CAM_MAX);
+}
+
 function update(dt) {
   G.time += dt;
   stepSmoke(G, dt);
@@ -628,6 +660,7 @@ function update(dt) {
     updateDemo(dt);
   } else if (G.state === 'playing') {
     updatePlaying(dt);
+    updateCamera();
   } else if (G.state === 'levelclear') {
     stepParticles(G, dt);
     updateFloats(dt);
@@ -642,8 +675,10 @@ function update(dt) {
 
 // ---- Title demo tanks ----
 function initDemo() {
-  G.demoGrid = Array.from({ length: 13 }, () => Array(13).fill('.'));
-  const colors = ['#ffd23f', '#7dff5e', '#9aa87c'];
+  G.camX = 0;
+  G.camY = 0;
+  G.demoGrid = Array.from({ length: 19 }, () => Array(19).fill('.'));
+  const colors = ['#5c7a3a', '#b89a5e', '#4a4d52'];
   G.demoTanks = [];
   for (let i = 0; i < 3; i++) {
     const t = makeTank({
@@ -679,18 +714,28 @@ function render() {
   if (G.shakeT > 0 && G.shakeMag > 0) {
     ctx.translate(rand(-G.shakeMag, G.shakeMag), rand(-G.shakeMag, G.shakeMag));
   }
-  ctx.fillStyle = G.mode === 'neon' ? '#05010f' : '#04060f';
+  ctx.fillStyle = G.mode === 'pro' ? '#0a0503' : '#04060f';
   ctx.fillRect(-24, -24, 1328, 768);
-  // War battlefield: pre-rendered static ground + edge ruins, blitted
-  // once; only the smoke puffs and neon fires animate, behind the tiles.
+  // War battlefield: pre-rendered static ground + edge ruins. The edge
+  // layer is screen-space; the world layer scrolls with the camera.
+  // Only the smoke puffs and fires animate, behind the tiles.
   ensureBackground(G);
-  drawBackgroundLayer(ctx, G);
+  drawEdgeLayer(ctx, G);
+  // The world (background ground, tiles, tanks, bullets, smoke, fires)
+  // is clipped to the 624x624 playfield window at (328,76): the world is
+  // 912x912, so without the clip it would paint over the side strips.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ORIGIN_X, ORIGIN_Y, VIEW_W, VIEW_H);
+  ctx.clip();
+  ctx.translate(-G.camX, -G.camY);
+  drawWorldLayer(ctx, G);
+  drawSmokeAndFires(ctx, G);
   if (G.state === 'title') {
     ctx.save();
     ctx.globalAlpha = 0.5;
     for (const t of G.demoTanks) drawTank(ctx, G, t);
     ctx.restore();
-    drawTitle(ctx, G);
   } else {
     drawTiles(ctx, G);
     drawPowerups(ctx, G);
@@ -701,6 +746,11 @@ function render() {
     drawGrassOver(ctx, G);
     drawParticles(ctx, G);
     drawFloats(ctx, G);
+  }
+  ctx.restore();
+  if (G.state === 'title') {
+    drawTitle(ctx, G);
+  } else {
     drawSideStrips(ctx, G);
     drawHUD(ctx, G);
     if (SHOW_FIRE && G.state === 'playing') drawFireButton(ctx, G);
@@ -730,6 +780,9 @@ requestAnimationFrame(frame);
 window.__game = {
   get state() { return G.state; },
   get mode() { return G.mode; },
+  get camera() { return { x: G.camX, y: G.camY }; },
+  get mapCols() { return COLS; },
+  get mapRows() { return ROWS; },
   get players() { return G.players; },
   get score() { return G.score1; },
   get score2() { return G.score2; },
@@ -758,8 +811,11 @@ window.__game = {
   get enemyList() {
     return G.enemies.filter((e) => e.alive).map((e) => ({
       x: Math.round(e.x), y: Math.round(e.y), kind: e.kind, carrier: e.carrier,
+      color: e.color, speed: Math.round(e.speed),
     }));
   },
+  get fires() { return G.fires.length; },
+  get smoke() { return G.smoke.length; },
   get banner() {
     if (G.bossState === 'warning') return 'WARNING: BOSS TANK';
     if (G.bossState === 'defeated') return 'BOSS DEFEATED!';
@@ -773,7 +829,7 @@ window.__game = {
   },
   get p1() {
     const p = G.playersArr[0];
-    return p ? { x: Math.round(p.x), y: Math.round(p.y), dir: p.dir, alive: p.alive } : null;
+    return p ? { x: Math.round(p.x), y: Math.round(p.y), dir: p.dir, alive: p.alive, dist: Math.round(p.dist || 0) } : null;
   },
   get p2() {
     const p = G.playersArr[1];
@@ -803,7 +859,7 @@ window.__game = {
     if (!p || !p.alive) return;
     const res = applyPowerup(G, p, type);
     if (p.player === 1) G.score1 += res.score;
-    addFloat(p.x, p.y - 30, res.label, '#4df3ff');
+    addFloat(p.x, p.y - 30, res.label, '#ffd23f');
     if (G.pendingBossKill) {
       G.pendingBossKill = false;
       if (G.boss && G.boss.alive) bossDefeated(p);

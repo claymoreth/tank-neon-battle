@@ -1,4 +1,4 @@
-// TANK NEON BATTLE — best-game-01 entry program (Node 22, standard
+// TANK PRO BATTLE — best-game-01 entry program (Node 22, standard
 // library only). The game is the static files under game/ (game/index.html
 // and its ES modules, no library, no network request). This program hands
 // the entry in: it copies game/ and screenshots/ from beside this file

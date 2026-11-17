@@ -3,6 +3,7 @@
 import { tileCenter } from './maps.js';
 import { makeTank, BOSS_SIZE } from './tank.js';
 import { fireAngled } from './bullet.js';
+import { smokePuff } from './particles.js';
 
 export const BOSS_DEFS = {
   5: { name: 'IRON MAW', hp: 10 },
@@ -20,7 +21,7 @@ export function bossDefFor(level) {
 
 export function spawnBoss(G) {
   const def = bossDefFor(G.level);
-  const c = tileCenter(0, 6);
+  const c = tileCenter(0, 9);
   const boss = makeTank({
     kind: 'boss',
     side: 'enemy',
@@ -31,8 +32,8 @@ export function spawnBoss(G) {
     dir: 2,
     speed: 35,
     hp: def.hp,
-    color: '#c026d3',
-    color2: '#701a75',
+    color: '#2c2f36',
+    color2: '#ff2d5d',
     protectT: 0,
   });
   boss.name = def.name;

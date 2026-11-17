@@ -2,7 +2,7 @@
 // STAR upgrades bullets, HELMET shields, GRENADE clears the screen,
 // SHOVEL armors the base ring, LIFE adds a life.
 import { randInt, choice } from './util.js';
-import { tileAt, setTile, RING_TILES } from './maps.js';
+import { tileAt, setTile, tileOf, RING_TILES, ROWS, COLS } from './maps.js';
 
 export const POWERUP_TYPES = ['star', 'helmet', 'grenade', 'shovel', 'life'];
 export const POWERUP_LIFE = 12; // seconds on the ground (blinks last 3 s)
@@ -14,16 +14,15 @@ export function makePowerup(type, row, col) {
 // Drop one on a random empty tile ('.').
 export function dropPowerup(G) {
   for (let tries = 0; tries < 60; tries++) {
-    const row = randInt(0, 12);
-    const col = randInt(0, 12);
+    const row = randInt(0, ROWS - 1);
+    const col = randInt(0, COLS - 1);
     if (tileAt(G.grid, row, col) !== '.') continue;
     // Not on top of a tank.
     let occupied = false;
     for (const t of [...G.playersArr, ...G.enemies]) {
       if (!t.alive) continue;
-      const tr = Math.floor((t.y - 76) / 48);
-      const tc = Math.floor((t.x - 328) / 48);
-      if (tr === row && tc === col) { occupied = true; break; }
+      const tr = tileOf(t.x, t.y);
+      if (tr.row === row && tr.col === col) { occupied = true; break; }
     }
     if (occupied) continue;
     const p = makePowerup(choice(POWERUP_TYPES), row, col);

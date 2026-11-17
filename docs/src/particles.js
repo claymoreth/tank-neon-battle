@@ -1,4 +1,4 @@
-// Particles: neon explosion sparks, muzzle flashes and bullet trails.
+// Particles: pro explosion sparks, muzzle flashes and bullet trails.
 // Classic mode uses one simple expanding circle instead.
 import { rand } from './util.js';
 
@@ -6,7 +6,7 @@ export function makeParticles() {
   return [];
 }
 
-// A burst of sparks at (x, y). Colors alternate orange/cyan in neon.
+// A burst of sparks at (x, y). Colors alternate orange/red in pro.
 export function burst(G, x, y, big) {
   if (G.mode === 'classic') {
     G.rings.push({ x, y, r: 6, max: big ? 60 : 36, t: 0.4, alive: true });
@@ -24,7 +24,7 @@ export function burst(G, x, y, big) {
       t: rand(0.3, 0.7),
       max: 0.7,
       size: rand(2, 4.5),
-      color: Math.random() < 0.5 ? '#ff9a3c' : '#4df3ff',
+      color: Math.random() < 0.5 ? '#ff9a3c' : '#ff2d3c',
       alive: true,
     });
   }
@@ -32,8 +32,30 @@ export function burst(G, x, y, big) {
 }
 
 export function muzzle(G, x, y) {
-  if (G.mode !== 'neon') return;
+  if (G.mode !== 'pro') return;
   G.muzzles.push({ x, y, t: 0.08, alive: true });
+}
+
+// A thin smoke puff at the muzzle when a tank fires (both modes).
+// PRO exhaust is thicker: more, bigger puffs.
+export function smokePuff(G, x, y, big) {
+  const pro = G.mode === 'pro';
+  const n = pro ? 5 : 3;
+  for (let i = 0; i < n; i++) {
+    const t = rand(0.5, 0.8);
+    G.particles.push({
+      x: x + rand(-4, 4),
+      y: y + rand(-4, 4),
+      vx: rand(-12, 12),
+      vy: rand(-30, -10),
+      t,
+      max: 0.8,
+      size: big ? 8 : 5,
+      color: '#9a9aa2',
+      smoke: true,
+      alive: true,
+    });
+  }
 }
 
 export function stepParticles(G, dt) {
@@ -42,6 +64,7 @@ export function stepParticles(G, dt) {
     p.y += p.vy * dt;
     p.vx *= 1 - 2.2 * dt;
     p.vy *= 1 - 2.2 * dt;
+    if (p.smoke) p.size += 16 * dt;
     p.t -= dt;
     if (p.t <= 0) p.alive = false;
   }
@@ -61,7 +84,7 @@ export function stepParticles(G, dt) {
 
 // Screen shake: magnitude in px, decays over time.
 export function shake(G, mag, dur) {
-  if (G.mode !== 'neon') return;
+  if (G.mode !== 'pro') return;
   G.shakeMag = Math.max(G.shakeMag, mag);
   G.shakeT = Math.max(G.shakeT, dur);
 }

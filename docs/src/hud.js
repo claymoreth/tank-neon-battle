@@ -39,10 +39,10 @@ export function drawMuteButton(ctx, G) {
   ctx.save();
   ctx.fillStyle = 'rgba(16,20,32,0.85)';
   ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = '#4df3ff';
+  ctx.strokeStyle = '#ffd23f';
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-  ctx.fillStyle = G.muted ? '#ff5d5d' : '#4df3ff';
+  ctx.fillStyle = G.muted ? '#ff5d5d' : '#ffd23f';
   ctx.font = 'bold 17px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -81,8 +81,8 @@ export function drawHUD(ctx, G) {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffffff';
   ctx.fillText('LEVEL ' + G.level, 560, 22);
-  ctx.fillStyle = G.mode === 'neon' ? '#4df3ff' : '#c9ced6';
-  ctx.fillText(G.mode === 'neon' ? 'NEON' : 'CLASSIC', 560, 48);
+  ctx.fillStyle = G.mode === 'pro' ? '#ff5a1a' : '#c9ced6';
+  ctx.fillText(G.mode === 'pro' ? 'PRO' : 'CLASSIC', 560, 48);
   // Right side: P2 in 2P, HI-SCORE in 1P.
   ctx.textAlign = 'right';
   if (G.players === 2) {
@@ -92,7 +92,7 @@ export function drawHUD(ctx, G) {
   } else {
     ctx.fillStyle = '#9aa0ab';
     ctx.fillText('HI-SCORE  ' + padScore(Math.max(G.highScore, G.score1)), 1224, 22);
-    ctx.fillStyle = '#4df3ff';
+    ctx.fillStyle = '#c9ced6';
     ctx.font = '13px monospace';
     ctx.fillText('M: MUTE   P: PAUSE', 1224, 48);
   }
@@ -151,7 +151,7 @@ export function drawBossBar(ctx, G) {
   ctx.fillRect(bx - 10, by - 22, bw + 20, 46);
   ctx.font = 'bold 15px monospace';
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#ff5df2';
+  ctx.fillStyle = '#ff2d5d';
   ctx.fillText('BOSS: ' + boss.name, 640, by - 8);
   ctx.fillStyle = '#3a0a12';
   ctx.fillRect(bx, by, bw, 14);
@@ -166,7 +166,7 @@ export function drawBossBar(ctx, G) {
 // ---- Title screen ----
 export const TITLE_RECTS = {
   classic: { x: 440, y: 280, w: 180, h: 48 },
-  neon: { x: 660, y: 280, w: 180, h: 48 },
+  pro: { x: 660, y: 280, w: 180, h: 48 },
   p1: { x: 490, y: 350, w: 120, h: 48 },
   p2: { x: 670, y: 350, w: 120, h: 48 },
   start: { x: 540, y: 430, w: 200, h: 56 },
@@ -174,7 +174,7 @@ export const TITLE_RECTS = {
 
 export function titleClick(G, x, y) {
   if (inRect(x, y, TITLE_RECTS.classic)) return 'mode-classic';
-  if (inRect(x, y, TITLE_RECTS.neon)) return 'mode-neon';
+  if (inRect(x, y, TITLE_RECTS.pro)) return 'mode-pro';
   if (inRect(x, y, TITLE_RECTS.p1)) return 'players-1';
   if (inRect(x, y, TITLE_RECTS.p2)) return 'players-2';
   if (inRect(x, y, TITLE_RECTS.start)) return 'start';
@@ -201,16 +201,16 @@ export function drawTitle(ctx, G) {
   // Dim the demo battle behind the title.
   ctx.fillStyle = 'rgba(4,6,15,0.72)';
   ctx.fillRect(0, 0, 1280, 720);
-  const neon = G.mode === 'neon';
+  const pro = G.mode === 'pro';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  if (neon) {
-    ctx.shadowColor = '#4df3ff';
-    ctx.shadowBlur = 30;
+  if (pro) {
+    ctx.shadowColor = '#ff5a1a';
+    ctx.shadowBlur = 14;
   }
-  ctx.fillStyle = neon ? '#4df3ff' : '#ffd23f';
+  ctx.fillStyle = pro ? '#ff5a1a' : '#ffd23f';
   ctx.font = 'bold 64px monospace';
-  ctx.fillText('TANK NEON BATTLE', 640, 150);
+  ctx.fillText('TANK PRO BATTLE', 640, 150);
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 24px monospace';
@@ -219,17 +219,24 @@ export function drawTitle(ctx, G) {
   ctx.fillStyle = '#9aa0ab';
   ctx.fillText('DEFEND THE EAGLE. DESTROY EVERY WAVE.', 640, 240);
   drawButton(ctx, TITLE_RECTS.classic, 'CLASSIC', G.mode === 'classic', '#ffd23f');
-  drawButton(ctx, TITLE_RECTS.neon, 'NEON', neon, '#4df3ff');
+  drawButton(ctx, TITLE_RECTS.pro, 'PRO', pro, '#ff5a1a');
   drawButton(ctx, TITLE_RECTS.p1, '1 PLAYER', G.players === 1, '#7dff5e');
   drawButton(ctx, TITLE_RECTS.p2, '2 PLAYERS', G.players === 2, '#7dff5e');
   drawButton(ctx, TITLE_RECTS.start, 'START', false, '#ff5d5d');
   ctx.fillStyle = '#ffd23f';
   ctx.font = 'bold 20px monospace';
   ctx.fillText('HI-SCORE  ' + padScore(G.highScore), 640, 525);
+  ctx.fillStyle = '#c9ced6';
+  ctx.font = '15px monospace';
+  ctx.fillText(
+    pro
+      ? 'PRO — MENACING MODE, MODERN TANKS, FIERCER ENEMIES'
+      : 'CLASSIC — OLD-SCHOOL MODE, CLASSIC TANKS',
+    640, 562);
   ctx.fillStyle = '#7d8598';
   ctx.font = '15px monospace';
   ctx.fillText('P1: WASD MOVE + SPACE / CLICK FIRE    |    P2: ARROWS MOVE + ENTER FIRE', 640, 600);
-  ctx.fillText('1/2 PLAYERS    C CLASSIC    N NEON    ENTER START    P PAUSE    M MUTE', 640, 628);
+  ctx.fillText('1/2 PLAYERS    C CLASSIC    O PRO    ENTER START    P PAUSE    M MUTE', 640, 628);
   ctx.fillText('FLASHING RED TANKS DROP POWER-UPS: STAR, HELMET, GRENADE, SHOVEL, LIFE', 640, 656);
   ctx.restore();
   drawMuteButton(ctx, G);
@@ -295,7 +302,7 @@ export function drawGameOver(ctx, G) {
   ctx.font = '20px monospace';
   ctx.fillText('HI-SCORE  ' + padScore(G.highScore), 640, 360);
   if (G.newHigh) {
-    ctx.fillStyle = '#4df3ff';
+    ctx.fillStyle = '#ffd23f';
     ctx.font = 'bold 22px monospace';
     ctx.fillText('NEW HIGH SCORE!', 640, 400);
   }
@@ -303,7 +310,7 @@ export function drawGameOver(ctx, G) {
   ctx.font = '18px monospace';
   ctx.fillText('REACHED LEVEL ' + G.level, 640, 435);
   drawButton(ctx, GAMEOVER_RECTS.restart, 'RESTART', false, '#7dff5e');
-  drawButton(ctx, GAMEOVER_RECTS.menu, 'MENU', false, '#4df3ff');
+  drawButton(ctx, GAMEOVER_RECTS.menu, 'MENU', false, '#ffd23f');
   ctx.fillStyle = '#7d8598';
   ctx.font = '15px monospace';
   ctx.fillText('R RESTART    ESC MENU', 640, 560);

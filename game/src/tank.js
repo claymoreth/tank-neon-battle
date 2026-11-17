@@ -9,7 +9,7 @@ export const BOSS_SIZE = 88;
 let nextId = 1;
 
 export function makeTank(opts) {
-  return {
+  const tank = {
     id: nextId++,
     kind: opts.kind, // 'player' | 'basic' | 'fast' | 'power' | 'big' | 'boss'
     side: opts.side, // 'player' | 'enemy'
@@ -37,7 +37,16 @@ export function makeTank(opts) {
     shootT: 0,
     respawnT: 0,
     blinkT: 0,
+    // Realistic-drawing state: distance driven (scrolls the tread links),
+    // barrel recoil timer (0.12 s after a shot), muzzle-flash timer.
+    dist: 0,
+    recoilT: 0,
+    muzzleT: 0,
   };
+  // Deterministic per-tank camo seed, so each tank's blotches differ
+  // but stay stable frame to frame.
+  tank.camoSeed = (tank.id * 2654435761) >>> 0;
+  return tank;
 }
 
 // Tiles a tank may not enter.
@@ -108,6 +117,10 @@ export function moveTank(grid, t, dist, others) {
         break;
       }
     }
+  }
+  // Distance actually driven: scrolls the tread links in the drawing.
+  if (t.x !== oldX || t.y !== oldY) {
+    t.dist = (t.dist || 0) + Math.hypot(t.x - oldX, t.y - oldY);
   }
   return !blocked || t.x !== oldX || t.y !== oldY;
 }

@@ -1,9 +1,12 @@
 // Bullets: movement and every collision (tiles, tanks, the base,
 // bullet vs bullet). One job: what a bullet does each step.
-import { tileAt, setTile, tileOf, BASE_ROW, BASE_COL } from './maps.js';
+import { tileAt, setTile, tileOf, BASE_ROW, BASE_COL, ROWS, COLS } from './maps.js';
 import { rectsOverlap } from './util.js';
 
 export const BULLET_SIZE = 8;
+// Barrel recoil after a shot: the barrel pulls back ~4 px for 0.12 s.
+export const RECOIL_TIME = 0.12;
+export const RECOIL_PX = 4;
 
 let nextBulletId = 1;
 
@@ -22,7 +25,7 @@ export function makeBullet(opts) {
     alive: true,
     w: BULLET_SIZE, // 8x8 — rectsOverlap needs w/h or every hit test is NaN
     h: BULLET_SIZE,
-    trail: [], // neon trail points (newest last)
+    trail: [], // pro trail points (newest last)
   };
 }
 
@@ -36,6 +39,9 @@ export function fireBullet(tank, speed, steel) {
   ][tank.dir];
   const bx = tank.x + d.x * (tank.w / 2 + 6);
   const by = tank.y + d.y * (tank.h / 2 + 6);
+  // Firing juice: barrel recoils and the muzzle flashes.
+  tank.recoilT = RECOIL_TIME;
+  tank.muzzleT = 0.08;
   return makeBullet({
     x: bx,
     y: by,
@@ -53,6 +59,8 @@ export function fireBullet(tank, speed, steel) {
 export function fireAngled(tank, angle, speed) {
   const bx = tank.x + Math.cos(angle) * (tank.w / 2 + 6);
   const by = tank.y + Math.sin(angle) * (tank.h / 2 + 6);
+  tank.recoilT = RECOIL_TIME;
+  tank.muzzleT = 0.08;
   return makeBullet({
     x: bx,
     y: by,
@@ -76,13 +84,13 @@ export function stepBullets(G, dt) {
     if (!b.alive) continue;
     b.x += b.vx * dt;
     b.y += b.vy * dt;
-    if (G.mode === 'neon') {
+    if (G.mode === 'pro') {
       b.trail.push({ x: b.x, y: b.y });
       if (b.trail.length > 10) b.trail.shift();
     }
     // Out of the playfield: dies.
     const { row, col } = tileOf(b.x, b.y);
-    if (row < 0 || row >= 13 || col < 0 || col >= 13) {
+    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) {
       b.alive = false;
       continue;
     }

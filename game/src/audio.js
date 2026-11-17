@@ -1,6 +1,6 @@
 // WebAudio synth sounds only, no audio files. One AudioContext, created
 // on the first user gesture; mute silences everything. Classic mode uses
-// plain square blips, neon mode richer zaps and noise.
+// plain square blips, pro mode richer zaps and noise.
 let ctx = null;
 let muted = false;
 
@@ -76,12 +76,12 @@ function noise(dur, vol, lowpass) {
 }
 
 export function sfxShoot(mode) {
-  if (mode === 'neon') tone(720, 0.09, 'sawtooth', 0.12, 180);
+  if (mode === 'pro') tone(720, 0.09, 'sawtooth', 0.12, 180);
   else tone(440, 0.07, 'square', 0.08, 220);
 }
 
 export function sfxEnemyShoot(mode) {
-  if (mode === 'neon') tone(300, 0.08, 'sawtooth', 0.06, 120);
+  if (mode === 'pro') tone(300, 0.08, 'sawtooth', 0.06, 120);
   else tone(220, 0.06, 'square', 0.05, 140);
 }
 
@@ -90,7 +90,7 @@ export function sfxHit() {
 }
 
 export function sfxExplode(mode) {
-  noise(0.35, 0.22, mode === 'neon' ? 2400 : 1200);
+  noise(0.35, 0.22, mode === 'pro' ? 2400 : 1200);
   tone(90, 0.3, 'sine', 0.16, 40);
 }
 

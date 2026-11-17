@@ -1,14 +1,16 @@
 // Enemies: the four tank types, the spawn queue and the AI that drives
 // them toward the base (or, sometimes, the nearest player).
 import { rand, randInt, choice, DIRS } from './util.js';
-import { tileCenter, ENEMY_SPAWNS, tileAt, ORIGIN_X, ORIGIN_Y, TILE } from './maps.js';
+import { tileCenter, ENEMY_SPAWNS, tileAt, ORIGIN_X, ORIGIN_Y, TILE, ROWS, COLS, BASE_ROW, BASE_COL } from './maps.js';
 import { makeTank, solidForTank } from './tank.js';
 
+// Realistic colors: classic = army/desert tones; PRO = black metallic
+// with red/orange fire accents (darker, spikier, menacing).
 export const ENEMY_TYPES = {
-  basic: { hp: 1, speed: 60, bullet: 220, score: 100, color: '#9aa87c', color2: '#5c6b45' },
-  fast: { hp: 1, speed: 110, bullet: 240, score: 200, color: '#c8c8c8', color2: '#7d7d7d' },
-  power: { hp: 3, speed: 50, bullet: 240, score: 300, color: '#ff8c1a', color2: '#a85400' },
-  big: { hp: 2, speed: 40, bullet: 220, score: 500, color: '#a02020', color2: '#5c1010' },
+  basic: { hp: 1, speed: 60, bullet: 220, score: 100, color: '#4a5a44', color2: '#6b7d5e', proColor: '#23232c', proColor2: '#ff3b30' },
+  fast: { hp: 1, speed: 110, bullet: 240, score: 200, color: '#b89a5e', color2: '#d8c08a', proColor: '#2a2a24', proColor2: '#ff8c1a' },
+  power: { hp: 3, speed: 50, bullet: 240, score: 300, color: '#6e2f1e', color2: '#a85438', proColor: '#2c1c1c', proColor2: '#ff2d3c' },
+  big: { hp: 2, speed: 40, bullet: 220, score: 500, color: '#4a4d52', color2: '#7d838c', proColor: '#1a1a1e', proColor2: '#ff3b30' },
 };
 
 export function spawnInterval(level) {
@@ -59,23 +61,26 @@ export function spawnEnemy(G, entry) {
     }
     if (blocked) continue;
     G.spawnPoint = (G.spawnPoint + s + 1) % ENEMY_SPAWNS.length;
+    const pro = G.mode === 'pro';
     const tank = makeTank({
       kind: entry.type,
       side: 'enemy',
       x: c.x,
       y: c.y,
       dir: 2,
-      speed: def.speed * G.speedScale,
+      // PRO enemies are faster (x1.15) as well as darker.
+      speed: def.speed * G.speedScale * (pro ? 1.15 : 1),
       hp: def.hp,
-      color: def.color,
-      color2: def.color2,
+      color: pro ? def.proColor : def.color,
+      color2: pro ? def.proColor2 : def.color2,
       carrier: entry.carrier,
       protectT: 1.0,
     });
     tank.bulletSpeed = def.bullet;
     tank.score = def.score;
     tank.aiT = rand(0.5, 1.5);
-    tank.shootT = rand(1.5, 3.0);
+    // PRO enemies shoot sooner and more often (x0.8 interval).
+    tank.shootT = pro ? rand(1.2, 2.4) : rand(1.5, 3.0);
     G.enemies.push(tank);
     return tank;
   }
@@ -89,7 +94,7 @@ function dirFree(G, t, d) {
   const ny = t.y + DIRS[d].y * step;
   const col = Math.floor((nx - ORIGIN_X) / TILE);
   const row = Math.floor((ny - ORIGIN_Y) / TILE);
-  if (row < 0 || row >= 13 || col < 0 || col >= 13) return false;
+  if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return false;
   if (solidForTank(tileAt(G.grid, row, col))) return false;
   // Also check the corners of the tank's leading edge.
   const half = t.w / 2 - 2;
@@ -109,13 +114,16 @@ function dirFree(G, t, d) {
 // target, and shoot when roughly aligned with it. allowShoot=false lets
 // the boss use this for movement only (it has its own 3-way timer).
 export function updateEnemyAI(G, t, dt, allowShoot) {
+  const pro = G.mode === 'pro';
   t.aiT -= dt;
   if (t.aiT <= 0) {
-    t.aiT = rand(1.0, 2.0);
+    // PRO enemies re-pick faster (0.8-1.6 s) and hunt the player
+    // half the time instead of a quarter.
+    t.aiT = pro ? rand(0.8, 1.6) : rand(1.0, 2.0);
     // Target: usually the base, sometimes the nearest player.
     let tx, ty;
     const players = G.playersArr.filter((p) => p.alive);
-    if (players.length && Math.random() < 0.25) {
+    if (players.length && Math.random() < (pro ? 0.5 : 0.25)) {
       let best = players[0];
       let bd = Infinity;
       for (const p of players) {
@@ -125,8 +133,8 @@ export function updateEnemyAI(G, t, dt, allowShoot) {
       tx = best.x;
       ty = best.y;
     } else {
-      tx = ORIGIN_X + 6 * TILE + TILE / 2;
-      ty = ORIGIN_Y + 12 * TILE + TILE / 2;
+      tx = ORIGIN_X + BASE_COL * TILE + TILE / 2;
+      ty = ORIGIN_Y + BASE_ROW * TILE + TILE / 2;
     }
     const dx = tx - t.x;
     const dy = ty - t.y;
@@ -143,18 +151,18 @@ export function updateEnemyAI(G, t, dt, allowShoot) {
     }
     if (picked !== null) t.dir = picked;
   }
-  // Shooting: every 1.5-3.0 s, when roughly aligned with the target
-  // or at random. Skipped when allowShoot is false (the boss shoots
-  // on its own 3-way timer instead).
+  // Shooting: every 1.5-3.0 s (PRO: 1.2-2.4 s), when roughly aligned
+  // with the target or at random. Skipped when allowShoot is false
+  // (the boss shoots on its own 3-way timer instead).
   t.shootT -= dt;
   if (allowShoot === false) return null;
   if (t.shootT <= 0) {
-    t.shootT = rand(1.5, 3.0);
+    t.shootT = pro ? rand(1.2, 2.4) : rand(1.5, 3.0);
     const players = G.playersArr.filter((p) => p.alive);
     const aligned = players.some(
       (p) => Math.abs(p.x - t.x) < 26 || Math.abs(p.y - t.y) < 26,
     );
-    const baseAligned = Math.abs(t.x - (ORIGIN_X + 6 * TILE + 24)) < 26;
+    const baseAligned = Math.abs(t.x - (ORIGIN_X + BASE_COL * TILE + 24)) < 26;
     if (aligned || baseAligned || Math.random() < 0.3) {
       return 'shoot';
     }
